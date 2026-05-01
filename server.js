@@ -11,7 +11,7 @@ const STORAGE_GROUP_ID = '-1003922829685';
 const ADMIN_IDS = ['7966491400']; 
 const PORT = process.env.PORT || 3000;
 
-console.log("🚀 Lancement de BOT PDF V2.0 (Mode Interactif)...");
+console.log("🚀 Lancement de BOT PDF V2.1 (Reset DB + Interactif)...");
 
 const bot = new Telegraf(BOT_TOKEN);
 const app = express();
@@ -26,13 +26,14 @@ const DB_FILE = path.join(dataDir, 'database.json');
 
 let pdfLibrary = [];
 let downloadHistory = []; 
-let uploadSessions = new Map(); // Pour gérer les lots en attente de catégorie
+let uploadSessions = new Map(); 
 
 if (fs.existsSync(DB_FILE)) {
     try {
         const data = JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
         pdfLibrary = data.files || [];
         downloadHistory = data.history || [];
+        console.log(`✅ Base chargée : ${pdfLibrary.length} fichiers.`);
     } catch (err) {
         pdfLibrary = []; downloadHistory = [];
     }
@@ -49,7 +50,6 @@ bot.telegram.getMe().then(me => { botInfo = me; });
 
 // --- LOGIQUE DU BOT ---
 
-// Gestion des téléchargements
 bot.start(async (ctx) => {
     const payload = ctx.payload;
     if (payload && payload.startsWith('dl_')) {
@@ -63,10 +63,21 @@ bot.start(async (ctx) => {
         }
         return;
     }
-    ctx.reply('📚 Bienvenue dans votre Bibliothèque ! Enregistrez vos PDF ici ou dans le groupe.');
+    ctx.reply('📚 Bienvenue dans votre Bibliothèque !');
 });
 
-// Réception des PDF (Mise en attente)
+// COMMANDE DE RÉINITIALISATION (ADMIN UNIQUEMENT)
+bot.command('reset_db', (ctx) => {
+    const userId = ctx.from.id.toString();
+    if (!ADMIN_IDS.includes(userId)) return;
+
+    pdfLibrary = [];
+    downloadHistory = [];
+    saveDatabase();
+    ctx.reply('💥 Base de données et statistiques réinitialisées avec succès !');
+});
+
+// Réception des PDF (Mise en attente pour lot)
 bot.on('document', async (ctx) => {
     const userId = ctx.from.id.toString();
     if (!ADMIN_IDS.includes(userId)) return;
@@ -79,13 +90,12 @@ bot.on('document', async (ctx) => {
     if (session.timeout) clearTimeout(session.timeout);
 
     session.files.push({
-        id: crypto.randomUUID(),
+        id: crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(),
         title: ctx.message.document.file_name.replace(/\.pdf$/i, '').replace(/_/g, ' '),
         fileId: ctx.message.document.file_id,
         timestamp: Date.now()
     });
 
-    // On attend 3 secondes de silence pour demander la catégorie
     session.timeout = setTimeout(() => {
         ctx.reply(`📂 ${session.files.length} fichier(s) reçu(s).\n\nIndiquez la destination :\n(Ex: 01 ARTICLES / TRADUCTIONS / ...)`);
     }, 3000);
@@ -147,6 +157,6 @@ app.post('/api/delete', (req, res) => {
     res.json({ success: true });
 });
 
-app.get('/', (req, res) => res.send('Serveur V2.0 Opérationnel 🚀'));
+app.get('/', (req, res) => res.send('Serveur V2.1 Opérationnel 🚀'));
 app.listen(PORT, '0.0.0.0', () => console.log(`📡 Port ${PORT}`));
 bot.launch();
