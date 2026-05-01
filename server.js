@@ -12,8 +12,6 @@ const STORAGE_GROUP_ID = '-1003922829685';
 const ADMIN_IDS = ['7966491400']; 
 const PORT = process.env.PORT || 3000;
 
-console.log("🚀 Lancement de BOT PDF V2.4 (Dossiers supprimables + Sync)...");
-
 const bot = new Telegraf(BOT_TOKEN);
 const app = express();
 
@@ -34,10 +32,7 @@ if (fs.existsSync(DB_FILE)) {
         const data = JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
         pdfLibrary = Array.isArray(data) ? data : (data.files || []);
         downloadHistory = data.history || [];
-        console.log(`✅ Base chargée : ${pdfLibrary.length} fichiers conservés.`);
-    } catch (err) {
-        console.error("❌ Erreur de chargement DB.");
-    }
+    } catch (err) { pdfLibrary = []; downloadHistory = []; }
 }
 
 const saveDatabase = () => {
@@ -64,14 +59,14 @@ bot.start(async (ctx) => {
         }
         return;
     }
-    ctx.reply('📚 Bibliothèque V2.4 prête.');
+    ctx.reply('📚 Bibliothèque V2.5 Opérationnelle.');
 });
 
 bot.command('reset_db', (ctx) => {
     if (!ADMIN_IDS.includes(ctx.from.id.toString())) return;
     pdfLibrary = []; downloadHistory = [];
     saveDatabase();
-    ctx.reply('💥 Base de données entièrement vidée.');
+    ctx.reply('💥 Base de données vidée.');
 });
 
 bot.on('document', async (ctx) => {
@@ -88,7 +83,7 @@ bot.on('document', async (ctx) => {
     const thumb = ctx.message.document.thumbnail || ctx.message.document.thumb;
 
     session.files.push({
-        id: crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(),
+        id: crypto.randomUUID(),
         title: ctx.message.document.file_name.replace(/\.pdf$/i, '').replace(/_/g, ' '),
         fileId: ctx.message.document.file_id,
         thumbId: thumb ? thumb.file_id : null,
@@ -96,7 +91,7 @@ bot.on('document', async (ctx) => {
     });
 
     session.timeout = setTimeout(() => {
-        ctx.reply(`📂 ${session.files.length} fichier(s) reçu(s).\n\nIndiquez la destination :\n(Ex: 06 MAGAZINES / TITRE)`);
+        ctx.reply(`📂 ${session.files.length} fichier(s) reçu(s).\n\nIndiquez la destination :\n(Ex: 06 MAGAZINES / HIGH TIMES)`);
     }, 3000);
 });
 
@@ -119,7 +114,7 @@ bot.on('text', async (ctx) => {
         pdfLibrary.push(...newEntries);
         saveDatabase();
         uploadSessions.delete(userId);
-        ctx.reply(`✅ Lot archivé avec succès.`);
+        ctx.reply(`✅ Archivé avec succès.`);
     }
 });
 
@@ -152,36 +147,25 @@ app.post('/api/stats', (req, res) => {
     });
 });
 
-// SUPPRESSION DE FICHIER UNIQUE
 app.post('/api/delete', (req, res) => {
     const { adminId, fileId } = req.body;
     if (!adminId || !ADMIN_IDS.includes(adminId.toString())) return res.status(403).json({ error: "Accès refusé" });
-
     pdfLibrary = pdfLibrary.filter(f => f.id !== fileId);
     downloadHistory = downloadHistory.filter(h => h.id !== fileId);
     saveDatabase();
     res.json({ success: true });
 });
 
-// NOUVELLE ROUTE : SUPPRESSION DE DOSSIER ENTIER
 app.post('/api/delete_folder', (req, res) => {
     const { adminId, category, subCat } = req.body;
     if (!adminId || !ADMIN_IDS.includes(adminId.toString())) return res.status(403).json({ error: "Accès refusé" });
-
-    // Identifier les fichiers à supprimer
-    const filesToRemove = pdfLibrary.filter(f => 
-        f.category === category && (!subCat || f.subCat === subCat)
-    ).map(f => f.id);
-
-    // Supprimer de la bibliothèque et de l'historique
-    pdfLibrary = pdfLibrary.filter(f => !filesToRemove.includes(f.id));
-    downloadHistory = downloadHistory.filter(h => !filesToRemove.includes(h.id));
-
+    const toRemove = pdfLibrary.filter(f => f.category === category && (!subCat || f.subCat === subCat)).map(f => f.id);
+    pdfLibrary = pdfLibrary.filter(f => !toRemove.includes(f.id));
+    downloadHistory = downloadHistory.filter(h => !toRemove.includes(h.id));
     saveDatabase();
-    console.log(`🗑️ Dossier supprimé : ${category} / ${subCat || ''} (${filesToRemove.length} fichiers retirés)`);
-    res.json({ success: true, removedCount: filesToRemove.length });
+    res.json({ success: true });
 });
 
-app.get('/', (req, res) => res.send('Serveur V2.4 Actif 🚀'));
+app.get('/', (req, res) => res.send('Serveur V2.5 Actif 🚀'));
 app.listen(PORT, '0.0.0.0', () => console.log(`📡 Port ${PORT}`));
 bot.launch();
