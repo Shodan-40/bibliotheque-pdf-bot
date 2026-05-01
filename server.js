@@ -1,241 +1,91 @@
-<!DOCTYPE html>
-<html lang="fr">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Bibliothèque PDF</title>
-    <!-- Chargement des bibliothèques via CDN -->
-    <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://unpkg.com/lucide@latest"></script>
-    <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap');
-        body { font-family: 'Inter', sans-serif; -webkit-tap-highlight-color: transparent; }
-        .animate-in { animation: fadeIn 0.2s ease-out forwards; }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
-        .no-scrollbar::-webkit-scrollbar { display: none; }
-        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-        
-        .index-text { font-size: 0.85rem; line-height: 1.6; color: #334155; }
-        .code-box { background: #f1f5f9; border-radius: 12px; padding: 12px; margin: 12px 0; border: 1px solid #e2e8f0; }
-        .code-line { display: flex; gap: 8px; font-size: 0.75rem; font-weight: 700; color: #1e293b; margin-bottom: 4px; }
-        .code-tag { font-family: monospace; color: #2563eb; background: white; padding: 1px 6px; border-radius: 4px; border: 1px solid #d1d5db; min-width: 65px; text-align: center; }
-    </style>
-</head>
-<body class="bg-slate-50 text-slate-900">
-    <div id="root"></div>
+const { Telegraf } = require('telegraf');
+const express = require('express');
+const cors = require('cors');
+const fs = require('fs');
+const path = require('path');
+const crypto = require('crypto');
 
-    <script type="text/babel">
-        const { useState, useEffect, useMemo, useRef } = React;
+// --- CONFIGURATION ---
+const BOT_TOKEN = '8715998408:AAFwUot0UYJeZct66cUi0MJRNDt8WSk-86E';
+const STORAGE_GROUP_ID = '-1003922829685';
+const ADMIN_IDS = ['7966491400']; 
+const PORT = process.env.PORT || 3000;
 
-        // Composant d'icône Lucide
-        const Icon = ({ name, size = 20, className = "" }) => {
-            const spanRef = useRef(null);
-            useEffect(() => {
-                if (spanRef.current && window.lucide) {
-                    try {
-                        spanRef.current.innerHTML = `<i data-lucide="${name}" class="${className}" style="width: ${size}px; height: ${size}px;"></i>`;
-                        window.lucide.createIcons({ root: spanRef.current });
-                    } catch (e) { console.error(e); }
-                }
-            }, [name, size, className]);
-            return <span ref={spanRef} className="inline-flex items-center"></span>;
-        };
+const bot = new Telegraf(BOT_TOKEN);
+const app = express();
 
-        const App = () => {
-            const [path, setPath] = useState([]);
-            const [showIndex, setShowIndex] = useState(false);
-            const [searchQuery, setSearchQuery] = useState('');
-            const [files, setFiles] = useState([]);
-            const [botUsername, setBotUsername] = useState('');
-            const [loading, setLoading] = useState(true);
-            const [apiStatus, setApiStatus] = useState('checking'); 
-            
-            // L'URL de votre serveur Render (Backend)
-            const API_URL = "https://bibliotheque-pdf-bot.onrender.com";
+app.use(cors());
+app.use(express.json());
 
-            const tg = window.Telegram?.WebApp;
+// --- GESTION DE LA BASE DE DONNÉES ---
+const dataDir = path.join(__dirname, '.data');
+if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir);
 
-            const fetchFiles = async () => {
-                setLoading(true);
-                setApiStatus('checking');
-                try {
-                    const res = await fetch(`${API_URL}/api/files`);
-                    const data = await res.json();
-                    
-                    const list = Array.isArray(data.files) ? data.files : Array.isArray(data) ? data : [];
-                    setFiles(list.filter(f => f && f.title));
-                    if (data.botUsername) setBotUsername(data.botUsername);
-                    
-                    setApiStatus('online');
-                } catch (err) {
-                    setApiStatus('offline');
-                } finally {
-                    setLoading(false);
-                }
-            };
+const DB_FILE = path.join(dataDir, 'database.json');
+let pdfLibrary = [];
 
-            useEffect(() => {
-                if (tg) {
-                    tg.ready();
-                    tg.expand();
-                }
-                fetchFiles();
-            }, []);
+const saveDatabase = () => {
+  try {
+    fs.writeFileSync(DB_FILE, JSON.stringify(pdfLibrary, null, 2));
+  } catch (err) {
+    console.error('Erreur sauvegarde:', err);
+  }
+};
 
-            // Logique de filtrage des dossiers et fichiers
-            const folderContent = useMemo(() => {
-                const q = searchQuery.toLowerCase().trim();
-                if (q) return { folders: [], filesList: files.filter(f => String(f.title).toLowerCase().includes(q)).sort((a,b) => a.title.localeCompare(b.title)) };
-                
-                const keys = ['category', 'subCat', 'subSubCat'];
-                const matchingFiles = files.filter(f => {
-                    for (let i = 0; i < path.length; i++) {
-                        if (String(f[keys[i]]).toUpperCase() !== String(path[i]).toUpperCase()) return false;
-                    }
-                    return true;
-                });
-                
-                const nextKey = keys[path.length];
-                if (!nextKey) return { folders: [], filesList: matchingFiles.sort((a,b) => a.title.localeCompare(b.title)) };
-                
-                const uniqueFolders = [...new Set(matchingFiles.map(f => f[nextKey]).filter(Boolean))].sort();
-                const filesList = matchingFiles.filter(f => !f[nextKey]).sort((a,b) => a.title.localeCompare(b.title));
-                
-                return { folders: uniqueFolders, filesList };
-            }, [files, path, searchQuery]);
+if (fs.existsSync(DB_FILE)) {
+  try {
+    pdfLibrary = JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
+  } catch (err) {}
+}
 
-            // Catégories réelles pour l'index
-            const categoriesList = useMemo(() => {
-                return [...new Set(files.map(f => f.category).filter(Boolean))].sort();
-            }, [files]);
+let botInfo = null;
+bot.telegram.getMe().then(me => { botInfo = me; });
 
-            const handleDownload = (file) => {
-                const deepLink = `https://t.me/${botUsername}?start=dl_${file.id}`;
-                if (tg?.openTelegramLink) tg.openTelegramLink(deepLink);
-                else window.open(deepLink, '_blank');
-            };
+// --- LOGIQUE DU BOT ---
+bot.start(async (ctx) => {
+  const payload = ctx.payload;
+  if (payload && payload.startsWith('dl_')) {
+    const file = pdfLibrary.find(f => f.id === payload.replace('dl_', ''));
+    if (file) {
+      file.downloads = (file.downloads || 0) + 1;
+      saveDatabase();
+      await ctx.reply(`🚀 Envoi de : ${file.title}`);
+      await ctx.sendDocument(file.fileId);
+    }
+    return;
+  }
+  ctx.reply('📚 Bienvenue dans la bibliothèque !');
+});
 
-            return (
-                <div className="min-h-screen bg-slate-50 flex flex-col relative overflow-hidden">
-                    <header className="sticky top-0 bg-white/95 border-b px-4 py-4 z-20 shadow-sm">
-                        <div className="flex items-center gap-3 mb-4">
-                            {(path.length > 0 || searchQuery || showIndex) ? (
-                                <button onClick={() => { if(searchQuery)setSearchQuery(''); else if(showIndex)setShowIndex(false); else setPath(path.slice(0,-1)); }} className="p-2 bg-slate-100 rounded-full"><Icon name="arrow-left" size={20}/></button>
-                            ) : <div className="w-10"></div>}
-                            <h1 onClick={() => { setPath([]); setShowIndex(false); setSearchQuery(''); }} className="text-xl font-black flex-1 text-center truncate uppercase italic tracking-tight cursor-pointer">Bibliothèque</h1>
-                            <button onClick={fetchFiles} className={`p-2 rounded-full ${loading ? 'animate-spin text-blue-600' : 'text-slate-400'}`}><Icon name="refresh-cw" size={20}/></button>
-                        </div>
-                        {!showIndex && (
-                            <div className="relative">
-                                <Icon name="search" size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                                <input type="text" placeholder="Rechercher par titre..." className="w-full bg-slate-100 rounded-2xl py-3 pl-10 pr-4 outline-none text-sm" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
-                            </div>
-                        )}
-                    </header>
+bot.on('document', async (ctx) => {
+  const chatId = ctx.chat.id.toString();
+  if (chatId !== STORAGE_GROUP_ID) return;
 
-                    <div className={`px-4 py-1.5 text-[10px] flex items-center justify-between font-black uppercase tracking-widest ${apiStatus === 'online' ? 'text-emerald-600 bg-emerald-50' : 'text-rose-600 bg-rose-50'}`}>
-                        <div className="flex items-center gap-1.5"><Icon name={apiStatus === 'online' ? 'check-circle' : 'wifi-off'} size={12} />{apiStatus === 'online' ? 'Connecté' : 'Déconnecté'}</div>
-                        <span className="opacity-50">CLOUD RENDER</span>
-                    </div>
+  const doc = ctx.message.document;
+  const caption = ctx.message.caption || '';
+  const tags = caption.match(/#\S+/g) || [];
+  
+  const newEntry = {
+    id: crypto.randomUUID(),
+    title: doc.file_name.replace(/\.pdf$/i, '').replace(/_/g, ' '),
+    category: tags[0] ? tags[0].replace('#', '') : 'AUTRE',
+    subCat: tags[1] ? tags[1].replace('#', '') : null,
+    fileId: doc.file_id,
+    downloads: 0,
+    timestamp: Date.now()
+  };
 
-                    <main className="p-4 pb-28 flex-1 overflow-y-auto no-scrollbar">
-                        {showIndex ? (
-                            <div className="space-y-8 animate-in">
-                                {/* Message d'accueil Index */}
-                                <div className="bg-white p-6 rounded-[2.5rem] shadow-xl border border-slate-100">
-                                    <h2 className="text-lg font-black uppercase italic mb-4 text-blue-600">Note d'Utilisation</h2>
-                                    <div className="index-text">
-                                        <p>Voici l'ensemble des documents disponibles. Certains sont en français et d'autres sont des traductions. Vous disposez également des originaux.</p>
-                                        <div className="code-box">
-                                            <div className="code-line"><span className="code-tag">[ FR ]</span> Articles Français</div>
-                                            <div className="code-line"><span className="code-tag">[ TRAD ]</span> Traductions</div>
-                                            <div className="code-line"><span className="code-tag">[ ANG ]</span> Articles Anglais</div>
-                                            <div className="code-line"><span className="code-tag">[ ITA ]</span> Articles Italiens</div>
-                                        </div>
-                                        <p className="bg-blue-50 p-4 rounded-2xl border border-blue-100 text-blue-800 font-bold text-xs italic">
-                                            Vous pouvez donc retrouver un même document en utilisant la fonction RECHERCHE afin d'avoir l'original et la traduction en cas d'erreur.
-                                        </p>
-                                    </div>
-                                </div>
+  pdfLibrary.push(newEntry);
+  saveDatabase();
+  ctx.reply(`✅ Archivé : ${newEntry.title}`);
+});
 
-                                {/* Liste des Catégories */}
-                                <div className="space-y-4">
-                                    <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2">Dossiers Disponibles ({categoriesList.length})</h3>
-                                    <div className="grid grid-cols-2 gap-3">
-                                        {categoriesList.map(cat => (
-                                            <button key={cat} onClick={() => { setPath([cat]); setShowIndex(false); }} className="bg-white p-5 rounded-3xl text-left shadow-lg border border-slate-100 active:scale-95 transition-all">
-                                                <div className="text-2xl mb-2">📂</div>
-                                                <span className="font-black text-[9px] uppercase leading-tight block">{cat}</span>
-                                            </button>
-                                        ))}
-                                    </div>
-                                </div>
+// --- API POUR L'INTERFACE ---
+app.get('/api/files', (req, res) => {
+  res.json({ botUsername: botInfo ? botInfo.username : '', files: pdfLibrary });
+});
 
-                                {/* Tous les PDF */}
-                                <div className="space-y-3">
-                                    <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2">Documents ({files.length})</h3>
-                                    {files.map(file => (
-                                        <FileCard key={file.id} file={file} onDownload={handleDownload} />
-                                    ))}
-                                </div>
-                            </div>
-                        ) : loading && files.length === 0 ? (
-                            <div className="flex flex-col items-center justify-center py-24 text-slate-400">
-                                <div className="w-10 h-10 border-4 border-t-blue-600 rounded-full animate-spin mb-4"></div>
-                                <p className="text-[10px] font-black uppercase">Initialisation...</p>
-                            </div>
-                        ) : (
-                            <div className="space-y-4">
-                                {folderContent.folders.map(folder => (
-                                    <button key={folder} onClick={() => setPath([...path, folder])} className="w-full bg-white p-6 rounded-[2rem] text-left shadow-lg border border-slate-100 flex items-center gap-4 active:scale-95 transition-all">
-                                        <div className="text-3xl">📂</div>
-                                        <span className="font-black text-[10px] uppercase">{folder}</span>
-                                    </button>
-                                ))}
-                                {folderContent.filesList.map(file => (
-                                    <FileCard key={file.id} file={file} onDownload={handleDownload} />
-                                ))}
-                            </div>
-                        )}
-                    </main>
+app.get('/', (req, res) => res.send('Serveur opérationnel 🚀'));
 
-                    <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40">
-                        <button onClick={() => setShowIndex(!showIndex)} className={`px-8 py-4 rounded-full shadow-2xl flex items-center gap-3 active:scale-95 transition-all ${showIndex ? 'bg-rose-600' : 'bg-slate-900'} text-white`}>
-                            <Icon name={showIndex ? 'arrow-left' : 'book-open'} size={20} />
-                            <span className="font-black text-[10px] uppercase tracking-widest">{showIndex ? 'Retour' : 'Index Global'}</span>
-                        </button>
-                    </div>
-                </div>
-            );
-        };
-
-        const FileCard = ({ file, onDownload }) => {
-            const titleStr = String(file.title || '').replace(/_/g, ' ');
-            let emoji = "📄";
-            if (/\bFR\b/i.test(titleStr)) emoji = '🇫🇷';
-            else if (/\bANG\b/i.test(titleStr)) emoji = '🇬🇧';
-            else if (/\bITA\b/i.test(titleStr)) emoji = '🇮🇹';
-            else if (/\bTRAD\b/i.test(titleStr)) emoji = '📖';
-
-            return (
-                <div className="bg-white p-5 rounded-[2.5rem] shadow-lg flex items-start gap-4 border border-slate-50 animate-in mb-4">
-                    <div className="w-12 h-12 bg-blue-50 rounded-2xl flex items-center justify-center text-blue-500 text-2xl flex-shrink-0">{emoji}</div>
-                    <div className="flex-1 min-w-0 pr-2">
-                        <h3 className="font-bold text-[11px] text-slate-800 leading-tight mb-3 break-words">{titleStr}</h3>
-                        <button onClick={() => onDownload(file)} className="w-full bg-slate-900 text-white py-3 rounded-xl font-black text-[9px] uppercase tracking-widest shadow-lg active:scale-95 flex items-center justify-center gap-2">
-                            <Icon name="download" size={12} /> Recevoir PDF
-                        </button>
-                    </div>
-                </div>
-            );
-        };
-
-        const root = ReactDOM.createRoot(document.getElementById('root'));
-        root.render(<App />);
-    </script>
-</body>
-</html>
+app.listen(PORT, () => console.log(`Serveur lancé sur le port ${PORT}`));
+bot.launch();
