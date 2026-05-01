@@ -53,15 +53,16 @@
             const [loading, setLoading] = useState(true);
             const [apiStatus, setApiStatus] = useState('checking'); 
             const [showSettings, setShowSettings] = useState(false);
-            const [adminTab, setAdminTab] = useState('stats');
             const [stats, setStats] = useState(null);
+            const [loadingStats, setLoadingStats] = useState(false);
             
             const API_URL = "https://bibliotheque-pdf-bot.onrender.com";
 
+            // --- GESTION ADMIN ---
             const tg = window.Telegram?.WebApp;
-            const ADMIN_IDS = ["7966491400"]; // Votre ID
+            const ADMIN_IDS = ["7966491400"];
             const currentUserId = tg?.initDataUnsafe?.user?.id?.toString() || null;
-            const isAdmin = currentUserId ? ADMIN_IDS.includes(currentUserId) : false;
+            const isAdmin = currentUserId && ADMIN_IDS.includes(currentUserId);
 
             const fetchFiles = async () => {
                 setLoading(true);
@@ -82,6 +83,7 @@
 
             const fetchStats = async () => {
                 if (!isAdmin) return;
+                setLoadingStats(true);
                 try {
                     const res = await fetch(`${API_URL}/api/stats`, {
                         method: 'POST',
@@ -92,7 +94,11 @@
                         const data = await res.json();
                         setStats(data);
                     }
-                } catch (err) {}
+                } catch (err) {
+                    console.error("Erreur stats:", err);
+                } finally {
+                    setLoadingStats(false);
+                }
             };
 
             useEffect(() => {
@@ -101,8 +107,8 @@
             }, []);
 
             useEffect(() => {
-                if (showSettings && adminTab === 'stats') fetchStats();
-            }, [showSettings, adminTab]);
+                if (showSettings) fetchStats();
+            }, [showSettings]);
 
             const folderContent = useMemo(() => {
                 const q = searchQuery.toLowerCase().trim();
@@ -137,13 +143,13 @@
 
             return (
                 <div className="min-h-screen bg-slate-50 flex flex-col relative overflow-hidden">
-                    {/* Top Bar */}
+                    {/* Header */}
                     <header className="sticky top-0 bg-white/95 backdrop-blur-md border-b border-slate-200 px-4 py-4 z-20">
                         <div className="flex items-center gap-3 mb-4">
                             {(path.length > 0 || searchQuery || showIndex) ? (
                                 <button onClick={() => { if(searchQuery)setSearchQuery(''); else if(showIndex)setShowIndex(false); else setPath(path.slice(0,-1)); }} className="p-2 bg-slate-100 rounded-full"><Icon name="arrow-left" size={20}/></button>
                             ) : isAdmin ? (
-                                <button onClick={() => setShowSettings(true)} className="p-2 text-slate-400 hover:text-blue-600 transition-colors"><Icon name="settings" size={22}/></button>
+                                <button onClick={() => setShowSettings(true)} className="p-2 text-slate-400 hover:text-blue-600 transition-all active:scale-90"><Icon name="settings" size={22}/></button>
                             ) : <div className="w-10"></div>}
                             <h1 onClick={() => { setPath([]); setShowIndex(false); setSearchQuery(''); }} className="text-xl font-black flex-1 text-center truncate uppercase italic tracking-tight cursor-pointer">Bibliothèque</h1>
                             <button onClick={fetchFiles} className={`p-2 rounded-full ${loading ? 'animate-spin text-blue-600' : 'text-slate-400'}`}><Icon name="refresh-cw" size={20}/></button>
@@ -156,9 +162,10 @@
                         )}
                     </header>
 
+                    {/* Status Bar */}
                     <div className={`px-4 py-1.5 text-[10px] flex items-center justify-between font-black uppercase tracking-widest ${apiStatus === 'online' ? 'text-emerald-600 bg-emerald-50' : 'text-rose-600 bg-rose-50'}`}>
                         <div className="flex items-center gap-1.5"><Icon name={apiStatus === 'online' ? 'check-circle' : 'wifi-off'} size={12} />{apiStatus === 'online' ? 'Serveur Connecté' : 'Hors Ligne'}</div>
-                        <span className="opacity-50 text-[8px]">Render Cloud</span>
+                        <span className="opacity-50 text-[8px]">Cloud Render</span>
                     </div>
 
                     <main className="p-4 pb-28 flex-1 overflow-y-auto no-scrollbar">
@@ -191,7 +198,7 @@
                                     </div>
                                 </div>
                                 <div className="space-y-3">
-                                    <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2 flex items-center gap-2"><Icon name="file-text" size={12}/> Tous les PDF ({files.length})</h3>
+                                    <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2 flex items-center gap-2"><Icon name="file-text" size={12}/> Inventaire Complet ({files.length})</h3>
                                     {files.map(file => (
                                         <FileCard key={file.id} file={file} onDownload={handleDownload} />
                                     ))}
@@ -203,7 +210,7 @@
                                 <p className="text-[10px] font-black uppercase">Chargement Cloud...</p>
                             </div>
                         ) : (
-                            <div className="space-y-4 animate-in">
+                            <div className="space-y-4">
                                 {folderContent.folders.map(folder => (
                                     <button key={folder} onClick={() => setPath([...path, folder])} className="w-full bg-white p-6 rounded-[2.5rem] text-left shadow-lg border border-slate-100 flex items-center gap-4 active:scale-95 transition-all">
                                         <div className="text-3xl">📂</div>
@@ -215,11 +222,18 @@
                                 ))}
                             </div>
                         )}
+                        
+                        {/* DEBUG : S'affiche seulement si votre ID n'est pas reconnu */}
+                        {!isAdmin && currentUserId && (
+                            <div className="mt-8 p-4 bg-slate-100 rounded-2xl text-[8px] font-mono text-slate-400 text-center">
+                                ID détecté : {currentUserId} <br/> (La roue nécessite l'ID 7966491400)
+                            </div>
+                        )}
                     </main>
 
                     {/* Navigation flottante */}
                     <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40">
-                        <button onClick={() => setShowIndex(!showIndex)} className={`px-8 py-4 rounded-full shadow-2xl flex items-center gap-3 active:scale-95 transition-all ${showIndex ? 'bg-rose-600' : 'bg-slate-900'} text-white`}>
+                        <button onClick={() => setShowIndex(!showIndex)} className={`px-8 py-4 rounded-full shadow-2xl flex items-center gap-3 transition-all active:scale-95 ${showIndex ? 'bg-rose-600' : 'bg-slate-900'} text-white`}>
                             <Icon name={showIndex ? 'arrow-left' : 'book-open'} size={20} />
                             <span className="font-black text-[10px] uppercase tracking-widest">{showIndex ? 'Retour' : 'Index Global'}</span>
                         </button>
@@ -228,37 +242,42 @@
                     {/* Modal Admin / Statistiques */}
                     {showSettings && (
                         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-50 flex items-end p-4">
-                            <div className="bg-white w-full rounded-[2.5rem] p-6 animate-in flex flex-col shadow-2xl max-h-[80vh]">
+                            <div className="bg-white w-full rounded-[2.5rem] p-6 animate-in flex flex-col shadow-2xl max-h-[85vh]">
                                 <div className="flex justify-between items-center mb-6">
-                                    <h2 className="text-xl font-black uppercase italic tracking-tighter">Panel Administrateur</h2>
+                                    <h2 className="text-xl font-black uppercase italic tracking-tighter">Tableau de Bord Admin</h2>
                                     <button onClick={() => setShowSettings(false)} className="p-2 bg-slate-100 rounded-full"><Icon name="x" size={20}/></button>
                                 </div>
                                 
-                                {!stats ? (
-                                    <div className="py-20 text-center"><Icon name="refresh-cw" className="animate-spin text-blue-600" size={30} /></div>
+                                {loadingStats ? (
+                                    <div className="py-20 text-center flex flex-col items-center gap-3">
+                                        <div className="w-8 h-8 border-4 border-t-blue-600 rounded-full animate-spin"></div>
+                                        <p className="text-[10px] font-black uppercase text-slate-400">Calcul des stats...</p>
+                                    </div>
+                                ) : !stats ? (
+                                    <div className="py-20 text-center text-slate-400 font-bold italic">Impossible de charger les statistiques. Vérifiez que le serveur Render est à jour.</div>
                                 ) : (
-                                    <div className="space-y-6 overflow-y-auto no-scrollbar">
+                                    <div className="space-y-6 overflow-y-auto no-scrollbar pb-6">
                                         <div className="grid grid-cols-2 gap-3">
-                                            <div className="bg-blue-50 p-4 rounded-3xl border border-blue-100">
-                                                <div className="text-[9px] font-black uppercase text-blue-600 mb-1">Total Téléchargements</div>
-                                                <div className="text-3xl font-black">{stats.total}</div>
+                                            <div className="bg-blue-50 p-5 rounded-3xl border border-blue-100">
+                                                <div className="text-[9px] font-black uppercase text-blue-600 mb-1">Total Archivé</div>
+                                                <div className="text-3xl font-black">{files.length}</div>
                                             </div>
-                                            <div className="bg-emerald-50 p-4 rounded-3xl border border-emerald-100">
-                                                <div className="text-[9px] font-black uppercase text-emerald-600 mb-1">Aujourd'hui</div>
-                                                <div className="text-3xl font-black">{stats.today}</div>
+                                            <div className="bg-emerald-50 p-5 rounded-3xl border border-emerald-100">
+                                                <div className="text-[9px] font-black uppercase text-emerald-600 mb-1">Téléchargements</div>
+                                                <div className="text-3xl font-black">{stats.total || 0}</div>
                                             </div>
                                         </div>
 
                                         <div className="space-y-3">
-                                            <h3 className="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-2">Top 10 Documents</h3>
+                                            <h3 className="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-2">Top 10 les plus lus</h3>
                                             <div className="bg-slate-50 rounded-[2rem] p-2 space-y-1 border border-slate-100">
-                                                {stats.top10.map((f, i) => (
+                                                {stats.top10 && stats.top10.length > 0 ? stats.top10.map((f, i) => (
                                                     <div key={i} className="flex items-center gap-3 p-3 bg-white rounded-2xl shadow-sm">
                                                         <div className="w-6 h-6 rounded-full bg-slate-100 flex items-center justify-center text-[9px] font-black">{i+1}</div>
                                                         <div className="flex-1 truncate text-[10px] font-bold text-slate-700">{f.title}</div>
                                                         <div className="text-[10px] font-black text-blue-600 bg-blue-50 px-2 py-1 rounded-lg flex items-center gap-1"><Icon name="download" size={10} />{f.downloads}</div>
                                                     </div>
-                                                ))}
+                                                )) : <div className="p-4 text-center text-[10px] font-bold text-slate-400">Aucune donnée disponible.</div>}
                                             </div>
                                         </div>
                                     </div>
@@ -290,246 +309,6 @@
                         <h3 className="font-bold text-[11px] text-slate-800 leading-tight mb-3 break-words">{titleStr}</h3>
                         <button onClick={() => onDownload(file)} className="w-full bg-slate-900 text-white py-3.5 rounded-xl font-black text-[9px] uppercase tracking-widest shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2">
                             <Icon name="download" size={14} strokeWidth={3}/> Recevoir PDF
-                        </button>
-                    </div>
-                </div>
-            );
-        };
-
-        const root = ReactDOM.createRoot(document.getElementById('root'));
-        root.render(<App />);
-    </script>
-</body>
-</html><!DOCTYPE html>
-<html lang="fr">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Bibliothèque PDF</title>
-    <!-- Chargement des bibliothèques via CDN -->
-    <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://unpkg.com/lucide@latest"></script>
-    <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap');
-        body { font-family: 'Inter', sans-serif; -webkit-tap-highlight-color: transparent; }
-        .animate-in { animation: fadeIn 0.2s ease-out forwards; }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
-        .no-scrollbar::-webkit-scrollbar { display: none; }
-        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-        
-        .index-text { font-size: 0.85rem; line-height: 1.6; color: #334155; }
-        .code-box { background: #f1f5f9; border-radius: 12px; padding: 12px; margin: 12px 0; border: 1px solid #e2e8f0; }
-        .code-line { display: flex; gap: 8px; font-size: 0.75rem; font-weight: 700; color: #1e293b; margin-bottom: 4px; }
-        .code-tag { font-family: monospace; color: #2563eb; background: white; padding: 1px 6px; border-radius: 4px; border: 1px solid #d1d5db; min-width: 65px; text-align: center; }
-    </style>
-</head>
-<body class="bg-slate-50 text-slate-900">
-    <div id="root"></div>
-
-    <script type="text/babel">
-        const { useState, useEffect, useMemo, useRef } = React;
-
-        // Composant d'icône Lucide
-        const Icon = ({ name, size = 20, className = "" }) => {
-            const spanRef = useRef(null);
-            useEffect(() => {
-                if (spanRef.current && window.lucide) {
-                    try {
-                        spanRef.current.innerHTML = `<i data-lucide="${name}" class="${className}" style="width: ${size}px; height: ${size}px;"></i>`;
-                        window.lucide.createIcons({ root: spanRef.current });
-                    } catch (e) { console.error(e); }
-                }
-            }, [name, size, className]);
-            return <span ref={spanRef} className="inline-flex items-center"></span>;
-        };
-
-        const App = () => {
-            const [path, setPath] = useState([]);
-            const [showIndex, setShowIndex] = useState(false);
-            const [searchQuery, setSearchQuery] = useState('');
-            const [files, setFiles] = useState([]);
-            const [botUsername, setBotUsername] = useState('');
-            const [loading, setLoading] = useState(true);
-            const [apiStatus, setApiStatus] = useState('checking'); 
-            
-            // L'URL de votre serveur Render (Backend)
-            const API_URL = "https://bibliotheque-pdf-bot.onrender.com";
-
-            const tg = window.Telegram?.WebApp;
-
-            const fetchFiles = async () => {
-                setLoading(true);
-                setApiStatus('checking');
-                try {
-                    const res = await fetch(`${API_URL}/api/files`);
-                    const data = await res.json();
-                    
-                    const list = Array.isArray(data.files) ? data.files : Array.isArray(data) ? data : [];
-                    setFiles(list.filter(f => f && f.title));
-                    if (data.botUsername) setBotUsername(data.botUsername);
-                    
-                    setApiStatus('online');
-                } catch (err) {
-                    setApiStatus('offline');
-                } finally {
-                    setLoading(false);
-                }
-            };
-
-            useEffect(() => {
-                if (tg) {
-                    tg.ready();
-                    tg.expand();
-                }
-                fetchFiles();
-            }, []);
-
-            // Logique de filtrage des dossiers et fichiers
-            const folderContent = useMemo(() => {
-                const q = searchQuery.toLowerCase().trim();
-                if (q) return { folders: [], filesList: files.filter(f => String(f.title).toLowerCase().includes(q)).sort((a,b) => a.title.localeCompare(b.title)) };
-                
-                const keys = ['category', 'subCat', 'subSubCat'];
-                const matchingFiles = files.filter(f => {
-                    for (let i = 0; i < path.length; i++) {
-                        if (String(f[keys[i]]).toUpperCase() !== String(path[i]).toUpperCase()) return false;
-                    }
-                    return true;
-                });
-                
-                const nextKey = keys[path.length];
-                if (!nextKey) return { folders: [], filesList: matchingFiles.sort((a,b) => a.title.localeCompare(b.title)) };
-                
-                const uniqueFolders = [...new Set(matchingFiles.map(f => f[nextKey]).filter(Boolean))].sort();
-                const filesList = matchingFiles.filter(f => !f[nextKey]).sort((a,b) => a.title.localeCompare(b.title));
-                
-                return { folders: uniqueFolders, filesList };
-            }, [files, path, searchQuery]);
-
-            // Catégories réelles pour l'index
-            const categoriesList = useMemo(() => {
-                return [...new Set(files.map(f => f.category).filter(Boolean))].sort();
-            }, [files]);
-
-            const handleDownload = (file) => {
-                const deepLink = `https://t.me/${botUsername}?start=dl_${file.id}`;
-                if (tg?.openTelegramLink) tg.openTelegramLink(deepLink);
-                else window.open(deepLink, '_blank');
-            };
-
-            return (
-                <div className="min-h-screen bg-slate-50 flex flex-col relative overflow-hidden">
-                    <header className="sticky top-0 bg-white/95 border-b px-4 py-4 z-20 shadow-sm">
-                        <div className="flex items-center gap-3 mb-4">
-                            {(path.length > 0 || searchQuery || showIndex) ? (
-                                <button onClick={() => { if(searchQuery)setSearchQuery(''); else if(showIndex)setShowIndex(false); else setPath(path.slice(0,-1)); }} className="p-2 bg-slate-100 rounded-full"><Icon name="arrow-left" size={20}/></button>
-                            ) : <div className="w-10"></div>}
-                            <h1 onClick={() => { setPath([]); setShowIndex(false); setSearchQuery(''); }} className="text-xl font-black flex-1 text-center truncate uppercase italic tracking-tight cursor-pointer">Bibliothèque</h1>
-                            <button onClick={fetchFiles} className={`p-2 rounded-full ${loading ? 'animate-spin text-blue-600' : 'text-slate-400'}`}><Icon name="refresh-cw" size={20}/></button>
-                        </div>
-                        {!showIndex && (
-                            <div className="relative">
-                                <Icon name="search" size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                                <input type="text" placeholder="Rechercher par titre..." className="w-full bg-slate-100 rounded-2xl py-3 pl-10 pr-4 outline-none text-sm" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
-                            </div>
-                        )}
-                    </header>
-
-                    <div className={`px-4 py-1.5 text-[10px] flex items-center justify-between font-black uppercase tracking-widest ${apiStatus === 'online' ? 'text-emerald-600 bg-emerald-50' : 'text-rose-600 bg-rose-50'}`}>
-                        <div className="flex items-center gap-1.5"><Icon name={apiStatus === 'online' ? 'check-circle' : 'wifi-off'} size={12} />{apiStatus === 'online' ? 'Connecté' : 'Déconnecté'}</div>
-                        <span className="opacity-50">CLOUD RENDER</span>
-                    </div>
-
-                    <main className="p-4 pb-28 flex-1 overflow-y-auto no-scrollbar">
-                        {showIndex ? (
-                            <div className="space-y-8 animate-in">
-                                {/* Message d'accueil Index */}
-                                <div className="bg-white p-6 rounded-[2.5rem] shadow-xl border border-slate-100">
-                                    <h2 className="text-lg font-black uppercase italic mb-4 text-blue-600">Note d'Utilisation</h2>
-                                    <div className="index-text">
-                                        <p>Voici l'ensemble des documents disponibles. Certains sont en français et d'autres sont des traductions. Vous disposez également des originaux.</p>
-                                        <div className="code-box">
-                                            <div className="code-line"><span className="code-tag">[ FR ]</span> Articles Français</div>
-                                            <div className="code-line"><span className="code-tag">[ TRAD ]</span> Traductions</div>
-                                            <div className="code-line"><span className="code-tag">[ ANG ]</span> Articles Anglais</div>
-                                            <div className="code-line"><span className="code-tag">[ ITA ]</span> Articles Italiens</div>
-                                        </div>
-                                        <p className="bg-blue-50 p-4 rounded-2xl border border-blue-100 text-blue-800 font-bold text-xs italic">
-                                            Vous pouvez donc retrouver un même document en utilisant la fonction RECHERCHE afin d'avoir l'original et la traduction en cas d'erreur.
-                                        </p>
-                                    </div>
-                                </div>
-
-                                {/* Liste des Catégories */}
-                                <div className="space-y-4">
-                                    <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2">Dossiers Disponibles ({categoriesList.length})</h3>
-                                    <div className="grid grid-cols-2 gap-3">
-                                        {categoriesList.map(cat => (
-                                            <button key={cat} onClick={() => { setPath([cat]); setShowIndex(false); }} className="bg-white p-5 rounded-3xl text-left shadow-lg border border-slate-100 active:scale-95 transition-all">
-                                                <div className="text-2xl mb-2">📂</div>
-                                                <span className="font-black text-[9px] uppercase leading-tight block">{cat}</span>
-                                            </button>
-                                        ))}
-                                    </div>
-                                </div>
-
-                                {/* Tous les PDF */}
-                                <div className="space-y-3">
-                                    <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2">Documents ({files.length})</h3>
-                                    {files.map(file => (
-                                        <FileCard key={file.id} file={file} onDownload={handleDownload} />
-                                    ))}
-                                </div>
-                            </div>
-                        ) : loading && files.length === 0 ? (
-                            <div className="flex flex-col items-center justify-center py-24 text-slate-400">
-                                <div className="w-10 h-10 border-4 border-t-blue-600 rounded-full animate-spin mb-4"></div>
-                                <p className="text-[10px] font-black uppercase">Initialisation...</p>
-                            </div>
-                        ) : (
-                            <div className="space-y-4">
-                                {folderContent.folders.map(folder => (
-                                    <button key={folder} onClick={() => setPath([...path, folder])} className="w-full bg-white p-6 rounded-[2rem] text-left shadow-lg border border-slate-100 flex items-center gap-4 active:scale-95 transition-all">
-                                        <div className="text-3xl">📂</div>
-                                        <span className="font-black text-[10px] uppercase">{folder}</span>
-                                    </button>
-                                ))}
-                                {folderContent.filesList.map(file => (
-                                    <FileCard key={file.id} file={file} onDownload={handleDownload} />
-                                ))}
-                            </div>
-                        )}
-                    </main>
-
-                    <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40">
-                        <button onClick={() => setShowIndex(!showIndex)} className={`px-8 py-4 rounded-full shadow-2xl flex items-center gap-3 active:scale-95 transition-all ${showIndex ? 'bg-rose-600' : 'bg-slate-900'} text-white`}>
-                            <Icon name={showIndex ? 'arrow-left' : 'book-open'} size={20} />
-                            <span className="font-black text-[10px] uppercase tracking-widest">{showIndex ? 'Retour' : 'Index Global'}</span>
-                        </button>
-                    </div>
-                </div>
-            );
-        };
-
-        const FileCard = ({ file, onDownload }) => {
-            const titleStr = String(file.title || '').replace(/_/g, ' ');
-            let emoji = "📄";
-            if (/\bFR\b/i.test(titleStr)) emoji = '🇫🇷';
-            else if (/\bANG\b/i.test(titleStr)) emoji = '🇬🇧';
-            else if (/\bITA\b/i.test(titleStr)) emoji = '🇮🇹';
-            else if (/\bTRAD\b/i.test(titleStr)) emoji = '📖';
-
-            return (
-                <div className="bg-white p-5 rounded-[2.5rem] shadow-lg flex items-start gap-4 border border-slate-50 animate-in mb-4">
-                    <div className="w-12 h-12 bg-blue-50 rounded-2xl flex items-center justify-center text-blue-500 text-2xl flex-shrink-0">{emoji}</div>
-                    <div className="flex-1 min-w-0 pr-2">
-                        <h3 className="font-bold text-[11px] text-slate-800 leading-tight mb-3 break-words">{titleStr}</h3>
-                        <button onClick={() => onDownload(file)} className="w-full bg-slate-900 text-white py-3 rounded-xl font-black text-[9px] uppercase tracking-widest shadow-lg active:scale-95 flex items-center justify-center gap-2">
-                            <Icon name="download" size={12} /> Recevoir PDF
                         </button>
                     </div>
                 </div>
