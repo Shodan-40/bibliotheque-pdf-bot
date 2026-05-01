@@ -3,8 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Bibliothèque PDF Pro</title>
-    <!-- Chargement des bibliothèques via CDN -->
+    <title>Bibliothèque PDF V1.2</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
@@ -38,7 +37,7 @@
                     try {
                         spanRef.current.innerHTML = `<i data-lucide="${name}" class="${className}" style="width: ${size}px; height: ${size}px;"></i>`;
                         window.lucide.createIcons({ root: spanRef.current });
-                    } catch (e) { console.error(e); }
+                    } catch (e) {}
                 }
             }, [name, size, className]);
             return <span ref={spanRef} className="inline-flex items-center"></span>;
@@ -51,32 +50,26 @@
             const [files, setFiles] = useState([]);
             const [botUsername, setBotUsername] = useState('');
             const [loading, setLoading] = useState(true);
-            const [apiStatus, setApiStatus] = useState('checking'); 
+            const [status, setStatus] = useState('checking'); 
             const [showAdmin, setShowAdmin] = useState(false);
             const [stats, setStats] = useState(null);
             
             const API_URL = "https://bibliotheque-pdf-bot.onrender.com";
-
-            const tg = window.Telegram?.WebApp;
             const ADMIN_IDS = ["7966491400"];
-            const currentUserId = tg?.initDataUnsafe?.user?.id?.toString() || null;
+            const tg = window.Telegram?.WebApp;
+            const currentUserId = tg?.initDataUnsafe?.user?.id?.toString();
             const isAdmin = currentUserId && ADMIN_IDS.includes(currentUserId);
 
             const fetchFiles = async () => {
                 setLoading(true);
-                setApiStatus('checking');
                 try {
                     const res = await fetch(`${API_URL}/api/files`);
                     const data = await res.json();
-                    const list = Array.isArray(data.files) ? data.files : Array.isArray(data) ? data : [];
-                    setFiles(list.filter(f => f && f.title));
+                    setFiles(Array.isArray(data.files) ? data.files : data);
                     if (data.botUsername) setBotUsername(data.botUsername);
-                    setApiStatus('online');
-                } catch (err) {
-                    setApiStatus('offline');
-                } finally {
-                    setLoading(false);
-                }
+                    setStatus('online');
+                } catch (err) { setStatus('offline'); }
+                finally { setLoading(false); }
             };
 
             const fetchStats = async () => {
@@ -89,7 +82,7 @@
                     });
                     const data = await res.json();
                     setStats(data);
-                } catch (err) { console.error(err); }
+                } catch (err) {}
             };
 
             useEffect(() => {
@@ -122,38 +115,58 @@
                 return { folders: uniqueFolders, filesList };
             }, [files, path, searchQuery]);
 
+            const handleDownload = (file) => {
+                setFiles(prev => prev.map(f => f.id === file.id ? {...f, downloads: (f.downloads || 0) + 1} : f));
+                const link = `https://t.me/${botUsername}?start=dl_${file.id}`;
+                if (tg?.openTelegramLink) tg.openTelegramLink(link);
+                else window.open(link, '_blank');
+            };
+
+            // LOGIQUE DU BOUTON FLOTTANT UNIQUE
+            const handleFloatingAction = () => {
+                if (showIndex) {
+                    setShowIndex(false);
+                } else if (path.length > 0) {
+                    setPath(path.slice(0, -1));
+                } else {
+                    setShowIndex(true);
+                }
+            };
+
+            const floatingButtonLabel = useMemo(() => {
+                if (showIndex) return "Quitter Index";
+                if (path.length > 0) return "Retour";
+                return "Index Global";
+            }, [showIndex, path]);
+
             return (
                 <div className="min-h-screen bg-slate-50 flex flex-col relative overflow-hidden">
-                    {/* Header */}
-                    <header className="sticky top-0 bg-white/95 border-b px-4 py-4 z-20 shadow-sm">
-                        <div className="flex items-center gap-3 mb-4">
+                    <header className="sticky top-0 bg-white border-b px-4 py-4 z-20 shadow-sm flex items-center justify-between">
+                        <div className="flex items-center gap-3">
                             {(path.length > 0 || searchQuery || showIndex) ? (
                                 <button onClick={() => { if(searchQuery)setSearchQuery(''); else if(showIndex)setShowIndex(false); else setPath(path.slice(0,-1)); }} className="p-2 bg-slate-100 rounded-full"><Icon name="arrow-left" size={20}/></button>
                             ) : isAdmin ? (
                                 <button onClick={() => setShowAdmin(true)} className="p-2 text-slate-400 active:scale-90 transition-all"><Icon name="settings" size={22}/></button>
                             ) : <div className="w-10"></div>}
                             <h1 onClick={() => { setPath([]); setShowIndex(false); setSearchQuery(''); }} className="text-xl font-black flex-1 text-center truncate uppercase italic tracking-tight cursor-pointer">Bibliothèque</h1>
-                            <button onClick={fetchFiles} className={`p-2 rounded-full ${loading ? 'animate-spin text-blue-600' : 'text-slate-400'}`}><Icon name="refresh-cw" size={20}/></button>
                         </div>
-                        {!showIndex && (
-                            <div className="relative">
-                                <Icon name="search" size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                                <input type="text" placeholder="Rechercher par titre..." className="w-full bg-slate-100 rounded-2xl py-3 pl-10 pr-4 outline-none text-sm focus:ring-2 focus:ring-blue-500/20" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
-                            </div>
-                        )}
+                        <div className={`w-3 h-3 rounded-full ${status === 'online' ? 'bg-emerald-500' : 'bg-rose-500 shadow-lg'}`}></div>
                     </header>
 
-                    <div className={`px-4 py-1.5 text-[10px] flex items-center justify-between font-black uppercase tracking-widest ${apiStatus === 'online' ? 'text-emerald-600 bg-emerald-50' : 'text-rose-600 bg-rose-50'}`}>
-                        <div className="flex items-center gap-1.5"><Icon name={apiStatus === 'online' ? 'check-circle' : 'wifi-off'} size={12} />{apiStatus === 'online' ? 'Serveur Connecté' : 'Hors Ligne'}</div>
-                        <span className="opacity-50">CLOUD RENDER</span>
-                    </div>
+                    {!showIndex && !loading && (
+                        <div className="px-4 pt-4 animate-in">
+                            <div className="relative">
+                                <Icon name="search" size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                                <input type="text" placeholder="Rechercher par titre..." className="w-full bg-white border border-slate-200 rounded-2xl py-3 pl-10 pr-4 outline-none text-sm shadow-sm" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
+                            </div>
+                        </div>
+                    )}
 
-                    <main className="p-4 pb-28 flex-1 overflow-y-auto no-scrollbar">
+                    <main className="p-4 pb-32 flex-1 overflow-y-auto no-scrollbar">
                         {showIndex ? (
                             <div className="space-y-8 animate-in">
-                                {/* LA SECTION INDEX AVEC LA PHRASE EXPLICATIVE */}
                                 <div className="bg-white p-6 rounded-[2.5rem] shadow-xl border border-slate-100 italic text-[11px] leading-relaxed">
-                                    <h2 className="text-blue-600 font-black uppercase tracking-widest mb-3">Note d'Utilisation</h2>
+                                    <h2 className="text-blue-600 font-black uppercase tracking-widest mb-3 text-center">Note d'Utilisation</h2>
                                     <p className="mb-3 text-slate-700">Voici l'ensemble des documents disponibles. Certains sont en français et d'autres sont des traductions. Vous disposez également des originaux.</p>
                                     
                                     <div className="code-box">
@@ -167,19 +180,30 @@
                                         Utilisez la fonction RECHERCHE pour trouver l'original et la traduction d'un même document.
                                     </p>
                                 </div>
-                                <div className="space-y-3">
+                                
+                                <div className="space-y-2">
                                     {files.sort((a,b) => a.title.localeCompare(b.title)).map(file => (
-                                        <FileCard key={file.id} file={file} bot={botUsername} tg={tg} />
+                                        <div key={file.id} className="bg-white p-5 rounded-[1.8rem] shadow-sm border border-slate-100 flex flex-col gap-1 active:bg-slate-50 transition-all" onClick={() => { setSearchQuery(file.title); setShowIndex(false); }}>
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-[9px] font-black text-blue-500 uppercase tracking-tighter bg-blue-50 px-2 py-0.5 rounded-full border border-blue-100 flex items-center gap-1">
+                                                    <Icon name="folder" size={10} /> {file.category || 'NON CLASSÉ'}
+                                                </span>
+                                                {file.subCat && <span className="text-[9px] font-black text-slate-400 italic">#{file.subCat}</span>}
+                                            </div>
+                                            <span className="text-[11px] font-bold text-slate-800 leading-tight uppercase tracking-tight">
+                                                {String(file.title).replace(/_/g, ' ')}
+                                            </span>
+                                        </div>
                                     ))}
                                 </div>
                             </div>
-                        ) : loading && files.length === 0 ? (
+                        ) : loading ? (
                             <div className="flex flex-col items-center justify-center py-24 text-slate-400">
                                 <div className="w-10 h-10 border-4 border-t-blue-600 rounded-full animate-spin mb-4"></div>
-                                <p className="text-[10px] font-black uppercase tracking-widest">Initialisation du Cloud...</p>
+                                <p className="text-[10px] font-black uppercase">Connexion Cloud...</p>
                             </div>
                         ) : (
-                            <div className="space-y-4">
+                            <div className="space-y-4 animate-in">
                                 {folderContent.folders.map(folder => (
                                     <button key={folder} onClick={() => setPath([...path, folder])} className="w-full bg-white p-6 rounded-[2rem] text-left shadow-lg border border-slate-100 flex items-center gap-4 active:scale-95 transition-all">
                                         <div className="text-3xl">📂</div>
@@ -187,31 +211,36 @@
                                     </button>
                                 ))}
                                 {folderContent.filesList.map(file => (
-                                    <FileCard key={file.id} file={file} bot={botUsername} tg={tg} />
+                                    <FileCard key={file.id} file={file} onDownload={handleDownload} />
                                 ))}
                             </div>
                         )}
                     </main>
 
-                    {/* Navigation flottante */}
+                    {/* BOUTON FLOTTANT UNIQUE INTELLIGENT */}
                     <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40">
-                        <button onClick={() => setShowIndex(!showIndex)} className={`px-8 py-4 rounded-full shadow-2xl flex items-center gap-3 active:scale-95 transition-all ${showIndex ? 'bg-rose-600 shadow-rose-200' : 'bg-slate-900 shadow-slate-300'} text-white`}>
-                            <Icon name={showIndex ? 'arrow-left' : 'book-open'} size={20} />
-                            <span className="font-black text-[10px] uppercase tracking-widest">{showIndex ? 'Fermer Index' : 'Index Global'}</span>
+                        <button 
+                            onClick={handleFloatingAction} 
+                            className={`px-10 py-4 rounded-full shadow-2xl flex items-center gap-3 active:scale-95 transition-all ${
+                                showIndex ? 'bg-rose-600 shadow-rose-200 text-white' : 
+                                path.length > 0 ? 'bg-white border border-slate-200 text-slate-900 shadow-slate-200' : 
+                                'bg-slate-900 shadow-slate-400 text-white'
+                            }`}
+                        >
+                            <Icon name={showIndex || path.length > 0 ? 'arrow-left' : 'book-open'} size={20} />
+                            <span className="font-black text-[10px] uppercase tracking-widest">{floatingButtonLabel}</span>
                         </button>
                     </div>
 
-                    {/* Modal Admin / Statistiques ORDONNÉES L'UNE SOUS L'AUTRE */}
                     {showAdmin && (
                         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-50 flex items-end p-4">
                             <div className="bg-white w-full rounded-[2.5rem] p-6 shadow-2xl max-h-[85vh] overflow-y-auto no-scrollbar animate-in">
                                 <div className="flex justify-between items-center mb-8">
-                                    <h2 className="text-xl font-black uppercase italic tracking-tighter">Statistiques du Bot</h2>
+                                    <h2 className="text-xl font-black uppercase italic tracking-tighter">Statistiques Admin</h2>
                                     <button onClick={() => setShowAdmin(false)} className="p-2 bg-slate-100 rounded-full"><Icon name="x" size={20}/></button>
                                 </div>
                                 {stats ? (
                                     <div className="space-y-4 pb-6">
-                                        {/* SECTION STATS ORDONNÉE VERTICALEMENT */}
                                         <StatCard label="Total Téléchargements" val={stats.total} col="blue" icon="trending-up" />
                                         <StatCard label="Aujourd'hui" val={stats.today} col="emerald" icon="calendar" />
                                         <StatCard label="Cette Semaine" val={stats.week} col="amber" icon="calendar-days" />
@@ -224,7 +253,7 @@
                                                 {stats.top10.map((f, i) => (
                                                     <div key={i} className="flex items-center gap-3 p-3 bg-white rounded-2xl shadow-sm">
                                                         <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-black ${i < 3 ? 'bg-blue-600 text-white shadow-lg shadow-blue-200' : 'bg-slate-100 text-slate-400'}`}>{i+1}</div>
-                                                        <div className="flex-1 truncate text-[10px] font-bold text-slate-700">{f.title}</div>
+                                                        <div className="flex-1 truncate text-[10px] font-bold text-slate-700">{String(f.title).replace(/_/g, ' ')}</div>
                                                         <div className="text-[10px] font-black text-blue-600 bg-blue-50 px-2 py-1 rounded-lg">↓ {f.downloads}</div>
                                                     </div>
                                                 ))}
@@ -234,7 +263,7 @@
                                 ) : (
                                     <div className="py-20 text-center flex flex-col items-center gap-4">
                                         <div className="w-10 h-10 border-4 border-t-blue-600 rounded-full animate-spin"></div>
-                                        <p className="text-[10px] font-black uppercase text-slate-400">Analyse des données...</p>
+                                        <p className="text-[10px] font-black uppercase text-slate-400">Analyse...</p>
                                     </div>
                                 )}
                             </div>
@@ -263,24 +292,17 @@
                             <div className="text-2xl font-black text-slate-900">{val || 0}</div>
                         </div>
                     </div>
-                    <Icon name="chevron-right" size={16} className="opacity-20" />
                 </div>
             );
         };
 
-        const FileCard = ({ file, bot, tg }) => {
+        const FileCard = ({ file, onDownload }) => {
             const titleStr = String(file.title || '').replace(/_/g, ' ');
             let emoji = "📄";
             if (/\bFR\b/i.test(titleStr)) emoji = '🇫🇷';
             else if (/\bANG\b/i.test(titleStr)) emoji = '🇬🇧';
             else if (/\bITA\b/i.test(titleStr)) emoji = '🇮🇹';
             else if (/\bTRAD\b/i.test(titleStr)) emoji = '📖';
-
-            const download = () => {
-                const link = `https://t.me/${bot}?start=dl_${file.id}`;
-                if (tg?.openTelegramLink) tg.openTelegramLink(link);
-                else window.open(link, '_blank');
-            };
 
             return (
                 <div className="bg-white p-5 rounded-[2.5rem] shadow-lg flex items-start gap-4 border border-slate-50 animate-in mb-3">
@@ -291,8 +313,8 @@
                         </div>
                     </div>
                     <div className="flex-1 min-w-0 pr-2">
-                        <h3 className="font-bold text-[11px] text-slate-800 leading-tight mb-3 break-words">{titleStr}</h3>
-                        <button onClick={download} className="w-full bg-slate-900 text-white py-3.5 rounded-xl font-black text-[9px] uppercase tracking-widest shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2">
+                        <h3 className="font-bold text-xs text-slate-800 leading-tight mb-3 break-words uppercase tracking-tight">{titleStr}</h3>
+                        <button onClick={() => onDownload(file)} className="w-full bg-slate-900 text-white py-3.5 rounded-xl font-black text-[9px] uppercase tracking-widest shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2">
                             <Icon name="download" size={14} /> Recevoir PDF
                         </button>
                     </div>
