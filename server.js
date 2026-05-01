@@ -4,6 +4,7 @@ const cors = require('cors');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const axios = require('axios');
 
 // --- CONFIGURATION ---
 const BOT_TOKEN = '8715998408:AAFwUot0UYJeZct66cUi0MJRNDt8WSk-86E';
@@ -11,7 +12,7 @@ const STORAGE_GROUP_ID = '-1003922829685';
 const ADMIN_IDS = ['7966491400']; 
 const PORT = process.env.PORT || 3000;
 
-console.log("🚀 Lancement de BOT PDF V2.1 (Reset DB + Interactif)...");
+console.log("🚀 Lancement de BOT PDF V2.4 (Dossiers supprimables + Sync)...");
 
 const bot = new Telegraf(BOT_TOKEN);
 const app = express();
@@ -31,11 +32,11 @@ let uploadSessions = new Map();
 if (fs.existsSync(DB_FILE)) {
     try {
         const data = JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
-        pdfLibrary = data.files || [];
+        pdfLibrary = Array.isArray(data) ? data : (data.files || []);
         downloadHistory = data.history || [];
-        console.log(`✅ Base chargée : ${pdfLibrary.length} fichiers.`);
+        console.log(`✅ Base chargée : ${pdfLibrary.length} fichiers conservés.`);
     } catch (err) {
-        pdfLibrary = []; downloadHistory = [];
+        console.error("❌ Erreur de chargement DB.");
     }
 }
 
@@ -63,21 +64,16 @@ bot.start(async (ctx) => {
         }
         return;
     }
-    ctx.reply('📚 Bienvenue dans votre Bibliothèque !');
+    ctx.reply('📚 Bibliothèque V2.4 prête.');
 });
 
-// COMMANDE DE RÉINITIALISATION (ADMIN UNIQUEMENT)
 bot.command('reset_db', (ctx) => {
-    const userId = ctx.from.id.toString();
-    if (!ADMIN_IDS.includes(userId)) return;
-
-    pdfLibrary = [];
-    downloadHistory = [];
+    if (!ADMIN_IDS.includes(ctx.from.id.toString())) return;
+    pdfLibrary = []; downloadHistory = [];
     saveDatabase();
-    ctx.reply('💥 Base de données et statistiques réinitialisées avec succès !');
+    ctx.reply('💥 Base de données entièrement vidée.');
 });
 
-// Réception des PDF (Mise en attente pour lot)
 bot.on('document', async (ctx) => {
     const userId = ctx.from.id.toString();
     if (!ADMIN_IDS.includes(userId)) return;
@@ -89,19 +85,21 @@ bot.on('document', async (ctx) => {
     const session = uploadSessions.get(userId);
     if (session.timeout) clearTimeout(session.timeout);
 
+    const thumb = ctx.message.document.thumbnail || ctx.message.document.thumb;
+
     session.files.push({
         id: crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(),
         title: ctx.message.document.file_name.replace(/\.pdf$/i, '').replace(/_/g, ' '),
         fileId: ctx.message.document.file_id,
+        thumbId: thumb ? thumb.file_id : null,
         timestamp: Date.now()
     });
 
     session.timeout = setTimeout(() => {
-        ctx.reply(`📂 ${session.files.length} fichier(s) reçu(s).\n\nIndiquez la destination :\n(Ex: 01 ARTICLES / TRADUCTIONS / ...)`);
+        ctx.reply(`📂 ${session.files.length} fichier(s) reçu(s).\n\nIndiquez la destination :\n(Ex: 06 MAGAZINES / TITRE)`);
     }, 3000);
 });
 
-// Réception de la catégorie (Validation du lot)
 bot.on('text', async (ctx) => {
     const userId = ctx.from.id.toString();
     const session = uploadSessions.get(userId);
@@ -110,21 +108,18 @@ bot.on('text', async (ctx) => {
         const parts = ctx.message.text.split('/').map(p => p.trim().toUpperCase());
         const cat = parts[0] || 'NON CLASSÉ';
         const sub = parts[1] || null;
-        const subSub = parts[2] || null;
 
         const newEntries = session.files.map(f => ({
             ...f,
             category: cat,
             subCat: sub,
-            subSubCat: subSub,
             downloads: 0
         }));
 
         pdfLibrary.push(...newEntries);
         saveDatabase();
         uploadSessions.delete(userId);
-        
-        ctx.reply(`✅ Lot de ${newEntries.length} fichiers indexé dans :\n📁 ${cat}${sub ? ' > ' + sub : ''}`);
+        ctx.reply(`✅ Lot archivé avec succès.`);
     }
 });
 
@@ -132,6 +127,14 @@ bot.on('text', async (ctx) => {
 
 app.get('/api/files', (req, res) => {
     res.json({ botUsername: botInfo ? botInfo.username : '', files: pdfLibrary });
+});
+
+app.get('/api/thumbnail/:thumbId', async (req, res) => {
+    try {
+        const link = await bot.telegram.getFileLink(req.params.thumbId);
+        const response = await axios({ url: link.href, method: 'GET', responseType: 'stream' });
+        response.data.pipe(res);
+    } catch (err) { res.status(404).send('Not found'); }
 });
 
 app.post('/api/stats', (req, res) => {
@@ -149,14 +152,36 @@ app.post('/api/stats', (req, res) => {
     });
 });
 
+// SUPPRESSION DE FICHIER UNIQUE
 app.post('/api/delete', (req, res) => {
     const { adminId, fileId } = req.body;
-    if (!adminId || !ADMIN_IDS.includes(adminId.toString())) return res.status(403).json({ error: "Interdit" });
+    if (!adminId || !ADMIN_IDS.includes(adminId.toString())) return res.status(403).json({ error: "Accès refusé" });
+
     pdfLibrary = pdfLibrary.filter(f => f.id !== fileId);
+    downloadHistory = downloadHistory.filter(h => h.id !== fileId);
     saveDatabase();
     res.json({ success: true });
 });
 
-app.get('/', (req, res) => res.send('Serveur V2.1 Opérationnel 🚀'));
+// NOUVELLE ROUTE : SUPPRESSION DE DOSSIER ENTIER
+app.post('/api/delete_folder', (req, res) => {
+    const { adminId, category, subCat } = req.body;
+    if (!adminId || !ADMIN_IDS.includes(adminId.toString())) return res.status(403).json({ error: "Accès refusé" });
+
+    // Identifier les fichiers à supprimer
+    const filesToRemove = pdfLibrary.filter(f => 
+        f.category === category && (!subCat || f.subCat === subCat)
+    ).map(f => f.id);
+
+    // Supprimer de la bibliothèque et de l'historique
+    pdfLibrary = pdfLibrary.filter(f => !filesToRemove.includes(f.id));
+    downloadHistory = downloadHistory.filter(h => !filesToRemove.includes(h.id));
+
+    saveDatabase();
+    console.log(`🗑️ Dossier supprimé : ${category} / ${subCat || ''} (${filesToRemove.length} fichiers retirés)`);
+    res.json({ success: true, removedCount: filesToRemove.length });
+});
+
+app.get('/', (req, res) => res.send('Serveur V2.4 Actif 🚀'));
 app.listen(PORT, '0.0.0.0', () => console.log(`📡 Port ${PORT}`));
 bot.launch();
