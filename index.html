@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Bibliothèque PDF V2.4</title>
+    <title>Bibliothèque PDF V2.5</title>
     <!-- Bibliothèques par CDN -->
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
@@ -167,7 +167,7 @@
                         <div className="px-4 pt-4 animate-in">
                             <div className="relative">
                                 <Icon name="search" size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                                <input type="text" placeholder="Rechercher..." className="w-full bg-white border border-slate-200 rounded-2xl py-3 pl-10 pr-4 outline-none text-sm shadow-sm" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
+                                <input type="text" placeholder="Rechercher par titre..." className="w-full bg-white border border-slate-200 rounded-2xl py-3 pl-10 pr-4 outline-none text-sm shadow-sm" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
                             </div>
                         </div>
                     )}
@@ -175,19 +175,35 @@
                     <main className="p-4 pb-32 flex-1 overflow-y-auto no-scrollbar">
                         {showIndex ? (
                             <div className="space-y-8 animate-in">
+                                {/* SECTION PRÉSENTATION INDEX */}
                                 <div className="bg-white p-6 rounded-[2.5rem] shadow-xl border border-slate-100 italic text-[11px] leading-relaxed">
                                     <h2 className="text-blue-600 font-black uppercase tracking-widest mb-3 text-center">Note d'Utilisation</h2>
-                                    <p className="mb-3 text-slate-700 text-center">Originaux et traductions sont disponibles. Utilisez la recherche pour les croiser.</p>
+                                    <p className="mb-3 text-slate-700 text-center">Voici l'ensemble des documents disponibles. Certains sont en français et d'autres sont des traductions. Vous disposez également des originaux.</p>
+                                    
                                     <div className="code-box">
                                         <div className="code-line"><span className="code-tag">[ FR ]</span> Articles Français</div>
                                         <div className="code-line"><span className="code-tag">[ TRAD ]</span> Traductions</div>
+                                        <div className="code-line"><span className="code-tag">[ ANG ]</span> Articles Anglais</div>
+                                        <div className="code-line"><span className="code-tag">[ ITA ]</span> Articles Italiens</div>
                                     </div>
+                                    
+                                    <p className="mt-4 p-4 bg-blue-50 rounded-2xl border border-blue-100 text-blue-800 font-black text-center uppercase tracking-tight">
+                                        Utilisez la fonction RECHERCHE pour trouver l'original et la traduction d'un même document.
+                                    </p>
                                 </div>
+
+                                {/* LISTE INDEX ORDONNÉE VERTICALEMENT */}
                                 <div className="space-y-2">
                                     {files.sort((a,b) => a.title.localeCompare(b.title)).map(file => (
                                         <div key={file.id} className="bg-white p-5 rounded-[1.8rem] shadow-sm border border-slate-100 flex flex-col gap-1 active:bg-slate-50 transition-all" onClick={() => { setSearchQuery(file.title); setShowIndex(false); }}>
-                                            <span className="text-[9px] font-black text-blue-500 uppercase tracking-tighter bg-blue-50 px-2 py-0.5 rounded-full border border-blue-100 w-fit">{file.category}</span>
-                                            <span className="text-[11px] font-bold text-slate-800 uppercase tracking-tight">{String(file.title).replace(/_/g, ' ')}</span>
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-[9px] font-black text-blue-500 uppercase tracking-tighter bg-blue-50 px-2 py-0.5 rounded-full border border-blue-100 flex items-center gap-1">
+                                                    <Icon name="folder" size={10} /> {file.category}
+                                                </span>
+                                            </div>
+                                            <span className="text-[11px] font-bold text-slate-800 uppercase tracking-tight">
+                                                {String(file.title).replace(/_/g, ' ')}
+                                            </span>
                                         </div>
                                     ))}
                                 </div>
@@ -220,7 +236,7 @@
                     </main>
 
                     <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40">
-                        <button onClick={handleFloatingAction} className={`px-10 py-4 rounded-full shadow-2xl flex items-center gap-3 active:scale-95 transition-all ${showIndex ? 'bg-rose-600 text-white' : path.length > 0 ? 'bg-white border border-slate-200 text-slate-900' : 'bg-slate-900 text-white'}`}>
+                        <button onClick={handleFloatingAction} className={`px-10 py-4 rounded-full shadow-2xl flex items-center gap-3 active:scale-95 transition-all ${showIndex ? 'bg-rose-600 text-white shadow-rose-200' : path.length > 0 ? 'bg-white border border-slate-200 text-slate-900 shadow-slate-200' : 'bg-slate-900 text-white shadow-slate-400'}`}>
                             <Icon name={showIndex || path.length > 0 ? 'arrow-left' : 'book-open'} size={20} />
                             <span className="font-black text-[10px] uppercase tracking-widest">
                                 {showIndex ? 'Fermer' : path.length > 0 ? 'Retour' : 'Index Global'}
@@ -237,11 +253,11 @@
                                 </div>
                                 {stats ? (
                                     <div className="space-y-4 pb-6">
-                                        <StatCard label="Total" val={stats.total} col="blue" icon="trending-up" />
+                                        <StatCard label="Total Téléchargements" val={stats.total} col="blue" icon="trending-up" />
                                         <StatCard label="Aujourd'hui" val={stats.today} col="emerald" icon="calendar" />
-                                        <StatCard label="Semaine" val={stats.week} col="amber" icon="calendar-days" />
-                                        <StatCard label="Mois" val={stats.month} col="purple" icon="layers" />
-                                        <StatCard label="Année" val={stats.year} col="rose" icon="bar-chart-3" />
+                                        <StatCard label="Cette Semaine" val={stats.week} col="amber" icon="calendar-days" />
+                                        <StatCard label="Ce Mois" val={stats.month} col="purple" icon="layers" />
+                                        <StatCard label="Cette Année" val={stats.year} col="rose" icon="bar-chart-3" />
                                         
                                         <div className="pt-6 space-y-4">
                                             <h3 className="text-[10px] font-black uppercase tracking-widest text-slate-400 pl-2 flex items-center gap-2"><Icon name="star" size={12}/> Top 10 Lectures</h3>
@@ -273,7 +289,7 @@
                 rose: "bg-rose-50 border-rose-100 text-rose-600" 
             };
             return (
-                <div className={`${colors[col]} p-5 rounded-[2rem] border shadow-md flex items-center justify-between`}>
+                <div className={`${colors[col]} p-5 rounded-[2rem] border shadow-md flex items-center justify-between transition-all active:scale-95`}>
                     <div className="flex items-center gap-4">
                         <div className="w-10 h-10 bg-white rounded-xl shadow-sm flex items-center justify-center"><Icon name={icon} size={20} /></div>
                         <div>
@@ -287,14 +303,26 @@
 
         const FileCard = ({ file, onDownload, isAdmin, onDelete, api }) => {
             const titleStr = String(file.title || '').replace(/_/g, ' ');
-            const showThumb = (file.category === "06 MAGAZINES" || file.category === "07 LIVRES") && file.thumbId;
+            
+            // Correction système de miniature : on cible précisément les catégories
+            const isMagOrBook = file.category === "06 MAGAZINES" || file.category === "07 LIVRES";
+            const showThumb = isMagOrBook && file.thumbId;
 
             return (
                 <div className="bg-white p-4 rounded-[2.5rem] shadow-lg flex items-start gap-4 border border-slate-50 animate-in mb-3">
                     <div className="flex flex-col items-center gap-1.5 mt-1">
                         {showThumb ? (
-                            <div className="w-16 h-20 bg-slate-100 rounded-xl overflow-hidden border border-slate-200 shadow-inner flex-shrink-0">
-                                <img src={`${api}/api/thumbnail/${file.thumbId}`} className="w-full h-full object-cover" alt="Cover" onError={(e) => e.target.style.display = 'none'} />
+                            <div className="w-16 h-20 bg-slate-100 rounded-xl overflow-hidden border border-slate-200 shadow-inner flex-shrink-0 relative">
+                                <img 
+                                    src={`${api}/api/thumbnail/${file.thumbId}`} 
+                                    className="w-full h-full object-cover" 
+                                    alt="Cover" 
+                                    loading="lazy"
+                                    onError={(e) => {
+                                        e.target.style.display = 'none';
+                                        e.target.parentElement.innerHTML = '<div class="w-full h-full flex items-center justify-center text-blue-500 text-2xl">📄</div>';
+                                    }} 
+                                />
                             </div>
                         ) : (
                             <div className="w-12 h-12 bg-blue-50 rounded-2xl flex items-center justify-center text-blue-500 text-2xl flex-shrink-0">📄</div>
