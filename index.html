@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
@@ -31,7 +31,7 @@
     <script type="text/babel">
         const { useState, useEffect, useMemo, useRef } = React;
 
-        // Composant Icône sécurisé pour éviter les crashs React
+        // Composant Icône sécurisé
         const Icon = ({ name, size = 20, className = "", strokeWidth = 2 }) => {
             const spanRef = useRef(null);
             useEffect(() => {
@@ -54,7 +54,6 @@
             const [loading, setLoading] = useState(true);
             const [apiStatus, setApiStatus] = useState('checking'); 
             
-            // L'ADRESSE DE VOTRE SERVEUR RENDER
             const DEFAULT_API_URL = "https://bibliotheque-pdf-bot.onrender.com";
 
             const getInitialUrl = () => {
@@ -69,8 +68,6 @@
 
             const [apiUrl, setApiUrl] = useState(getInitialUrl());
             const [showSettings, setShowSettings] = useState(false);
-            const [adminTab, setAdminTab] = useState('settings');
-            const [stats, setStats] = useState(null);
             const [tempUrl, setTempUrl] = useState(apiUrl);
 
             const tg = window.Telegram?.WebApp;
@@ -107,7 +104,6 @@
                 fetchFiles();
             }, []);
 
-            // Calcul dynamique des dossiers et fichiers
             const folderContent = useMemo(() => {
                 if (!Array.isArray(files)) return { folders: [], filesList: [] };
                 const q = searchQuery.toLowerCase().trim();
@@ -135,7 +131,6 @@
                 return { folders, filesList: filesList.sort((a,b) => a.title.localeCompare(b.title)) };
             }, [files, path, searchQuery]);
 
-            // Calcul des catégories réelles pour l'index
             const categoriesList = useMemo(() => {
                 const cats = [...new Set(files.map(f => f.category ? String(f.category).trim() : '').filter(v => v !== ''))];
                 return cats.sort((a,b) => a.localeCompare(b));
@@ -150,7 +145,6 @@
 
             return (
                 <div className="min-h-screen bg-slate-50 flex flex-col relative overflow-hidden">
-                    {/* Top Bar */}
                     <div className="sticky top-0 bg-white/95 backdrop-blur-sm border-b border-slate-200 px-4 py-4 z-20">
                         <div className="flex items-center gap-3 mb-4">
                             {(path.length > 0 || searchQuery || showIndex) ? (
@@ -171,32 +165,27 @@
 
                     <div className={`px-4 py-1.5 text-[10px] flex items-center justify-between font-black uppercase tracking-widest ${apiStatus === 'online' ? 'text-emerald-600 bg-emerald-50' : 'text-rose-600 bg-rose-50'}`}>
                         <div className="flex items-center gap-1.5"><Icon name={apiStatus === 'online' ? 'check-circle' : 'wifi-off'} size={12} />{apiStatus === 'online' ? 'Connecté' : 'Hors Ligne'}</div>
-                        <span className="opacity-50 truncate ml-4 lowercase font-mono">render-cloud</span>
+                        <span className="opacity-50 truncate ml-4 lowercase font-mono text-[8px]">serveur-cloud-render</span>
                     </div>
 
                     <div className="p-4 pb-28 flex-1 overflow-y-auto no-scrollbar">
                         {showIndex ? (
                             <div className="space-y-8 animate-in">
-                                {/* Message de présentation personnalisé */}
                                 <div className="bg-white p-6 rounded-[2.5rem] shadow-xl border border-slate-100">
                                     <h2 className="text-lg font-black uppercase italic mb-4 text-blue-600">Note d'Utilisation</h2>
                                     <div className="index-text">
                                         <p>Voici l'ensemble des documents disponibles. Certains sont en français et d'autres sont des traductions. Vous disposez également des originaux.</p>
-                                        
                                         <div className="code-box">
                                             <div className="code-line"><span className="code-tag">[ FR ]</span> Articles Français</div>
                                             <div className="code-line"><span className="code-tag">[ TRAD ]</span> Traductions</div>
                                             <div className="code-line"><span className="code-tag">[ ANG ]</span> Articles Anglais</div>
                                             <div className="code-line"><span className="code-tag">[ ITA ]</span> Articles Italiens</div>
                                         </div>
-
                                         <p className="bg-blue-50 p-4 rounded-2xl border border-blue-100 text-blue-800 font-bold text-xs italic">
                                             Vous pouvez donc retrouver un même document en utilisant la fonction RECHERCHE afin d'avoir l'original et la traduction en cas d'erreur.
                                         </p>
                                     </div>
                                 </div>
-
-                                {/* Liste des Catégories Réelles */}
                                 <div className="space-y-4">
                                     <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2 flex items-center gap-2">
                                         <Icon name="folder" size={12}/> Dossiers Actuels ({categoriesList.length})
@@ -210,21 +199,19 @@
                                         ))}
                                     </div>
                                 </div>
-
-                                {/* Liste intégrale des fichiers */}
                                 <div className="space-y-3">
                                     <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2 flex items-center gap-2">
                                         <Icon name="file-text" size={12}/> Inventaire Complet ({files.length})
                                     </h3>
                                     {files.map(file => (
-                                        <FileCard key={file.id} file={file} onDownload={handleDownload} isAdmin={isAdmin} />
+                                        <FileCard key={file.id} file={file} onDownload={handleDownload} />
                                     ))}
                                 </div>
                             </div>
                         ) : loading && files.length === 0 ? (
                             <div className="flex flex-col items-center justify-center py-24 text-slate-300">
                                 <div className="w-12 h-12 border-4 border-slate-200 border-t-blue-600 rounded-full animate-spin mb-4"></div>
-                                <p className="text-[10px] font-black uppercase tracking-widest">Connexion au Cloud...</p>
+                                <p className="text-[10px] font-black uppercase tracking-widest">Initialisation Cloud...</p>
                             </div>
                         ) : (
                             <div className="space-y-4">
@@ -242,7 +229,7 @@
                                     <div className="space-y-3 animate-in mt-4">
                                         <h2 className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2 mb-2">Documents ({folderContent.filesList.length})</h2>
                                         {folderContent.filesList.map(file => (
-                                            <FileCard key={file.id} file={file} onDownload={handleDownload} isAdmin={isAdmin} />
+                                            <FileCard key={file.id} file={file} onDownload={handleDownload} />
                                         ))}
                                     </div>
                                 )}
@@ -250,7 +237,6 @@
                         )}
                     </div>
 
-                    {/* Navigation flottante */}
                     <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40">
                         <button 
                             onClick={() => setShowIndex(!showIndex)} 
@@ -261,7 +247,6 @@
                         </button>
                     </div>
 
-                    {/* Modal Admin (Cachée) */}
                     {showSettings && (
                         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-50 flex items-end p-4">
                             <div className="bg-white w-full rounded-[2.5rem] p-6 animate-in flex flex-col shadow-2xl">
@@ -269,8 +254,8 @@
                                     <h2 className="text-lg font-black uppercase italic">Réglages Serveur</h2>
                                     <button onClick={() => setShowSettings(false)} className="p-2 bg-slate-100 rounded-full"><Icon name="x" size={20}/></button>
                                 </div>
-                                <input type="text" className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-6 py-4 font-mono text-xs mb-4" value={tempUrl} onChange={(e) => setTempUrl(e.target.value)} />
-                                <button onClick={() => { fetchFiles(tempUrl); setShowSettings(false); }} className="w-full bg-blue-600 text-white py-4 rounded-2xl font-black text-xs uppercase shadow-xl">Appliquer</button>
+                                <input type="text" className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-6 py-4 font-mono text-xs mb-4 outline-none focus:border-blue-500" value={tempUrl} onChange={(e) => setTempUrl(e.target.value)} />
+                                <button onClick={() => { fetchFiles(tempUrl); setShowSettings(false); }} className="w-full bg-blue-600 text-white py-4 rounded-2xl font-black text-xs uppercase shadow-xl">Appliquer les changements</button>
                             </div>
                         </div>
                     )}
@@ -278,7 +263,7 @@
             );
         };
 
-        const FileCard = ({ file, onDownload, isAdmin }) => {
+        const FileCard = ({ file, onDownload }) => {
             const titleStr = String(file.title || '').replace(/_/g, ' ');
             let emoji = null;
             if (/\bFR\b/i.test(titleStr)) emoji = '🇫🇷';
